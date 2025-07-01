@@ -1,0 +1,12 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+
+# LangChain Core and Integration Packages
+langchain
+langchain-openai
+langchain-anthropic
+langchain-google-genai
+
+# Environment variables
+python-dotenv

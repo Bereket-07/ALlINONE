@@ -5,7 +5,7 @@ from src.infrastructure.llm.llm_interface import LLMInterface
 
 class GeminiLLM(LLMInterface):
     """LangChain implementation for Google's Gemini."""
-    def __init__(self, model: str = "gemini-pro"):
+    def __init__(self, model: str = "gemini-2.5-flash"):
         self.model = ChatGoogleGenerativeAI(
             model=model,
             google_api_key=GOOGLE_API_KEY,

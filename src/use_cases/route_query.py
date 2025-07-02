@@ -1,16 +1,19 @@
 import re
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from src.config import OPENAI_API_KEY
+from src.config import GOOGLE_API_KEY
 from src.infrastructure.llm.llm_list import LLM_REGISTRY, AVAILABLE_LLM_NAMES
 
 # Define the Router LLM using LangChain
-router_llm = ChatOpenAI(
-    model="gpt-4o", 
-    temperature=0, 
-    api_key=OPENAI_API_KEY
-)
+router_llm = ChatGoogleGenerativeAI(
+            model='gemini-2.5-flash',
+            google_api_key=GOOGLE_API_KEY,
+            temperature=0.7,
+            max_output_tokens=1500
+        )
 
 # Define the prompt template for the router
 ROUTING_PROMPT_TEMPLATE = """
@@ -49,6 +52,7 @@ async def route_query_to_best_llm(user_query: str) -> dict:
         
         # Clean the output just in case the LLM adds extra text
         match = re.search(r'\b(' + '|'.join(AVAILABLE_LLM_NAMES) + r')\b', llm_choice.lower())
+        print(f"match in using the gemini router: {match}")
         if not match:
             print(f"Router LLM returned an invalid choice: '{llm_choice}'. Defaulting to chatgpt.")
             llm_choice = "chatgpt" # Fallback to a default

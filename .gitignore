@@ -15,3 +15,6 @@ env/
 # IDE specific
 .idea/
 .vscode/
+
+cloud-access-key.json/
+cloud-access-key.json

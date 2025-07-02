@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from src.controllers import query_controller
+from dotenv import load_dotenv
+load_dotenv() 
 
 # Create the FastAPI app
 app = FastAPI(

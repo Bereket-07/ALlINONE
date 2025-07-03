@@ -1,9 +1,17 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Header, Request
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import Optional
 from src.domain.models.auth_models import (
     UserRegisterRequest, UserLoginRequest, UserProfileResponse, AuthResponse, RefreshTokenRequest
 )
 from src.use_cases.auth_use_cases import AuthUseCases
+from src.utils.constants import ERROR_MESSAGES
+from src.utils.jwt_utils import JWTManager
+from src.utils.exceptions import (
+    AuthenticationError, InvalidCredentialsError, UserNotFoundError, 
+    UserAlreadyExistsError, WeakPasswordError, InvalidTokenError,
+    MissingAuthorizationError, InvalidAuthorizationFormatError,
+    ServiceUnavailableError, InvalidEmailError
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,38 +29,32 @@ async def get_current_user(request: Request) -> dict:
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header is required"
+            detail=ERROR_MESSAGES["MISSING_AUTHORIZATION"]
         )
     
     try:
         # Extract token from "Bearer <token>" format
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authorization header format. Use 'Bearer <token>'"
-            )
-        
-        token = authorization.split(" ")[1]
+        token = JWTManager.extract_token_from_header(authorization)
         if not token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token is required"
+                detail=ERROR_MESSAGES["INVALID_AUTHORIZATION_FORMAT"]
             )
         
         # Verify token
         decoded_token = await AuthUseCases.verify_token(token)
-        if not decoded_token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
-            )
-        
         return decoded_token
         
     except HTTPException:
         raise
+    except AuthenticationError as e:
+        logger.warning(f"Authentication error in get_current_user: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=e.message
+        )
     except Exception as e:
-        logger.error(f"Error in get_current_user: {e}")
+        logger.error(f"Unexpected error in get_current_user: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication failed"
@@ -71,19 +73,30 @@ async def register_user(request: UserRegisterRequest):
     """
     try:
         result = await AuthUseCases.register_user(request)
-        
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registration failed. User may already exist or invalid data provided."
-            )
-        
         return result
         
     except HTTPException:
         raise
+    except UserAlreadyExistsError as e:
+        logger.warning(f"Registration failed - user already exists: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=e.message
+        )
+    except (WeakPasswordError, InvalidEmailError) as e:
+        logger.warning(f"Registration failed - validation error: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=e.message
+        )
+    except ServiceUnavailableError as e:
+        logger.error(f"Registration failed - service unavailable: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=e.message
+        )
     except Exception as e:
-        logger.error(f"Error in register_user endpoint: {e}")
+        logger.error(f"Unexpected error in register_user endpoint: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during registration"
@@ -102,19 +115,24 @@ async def login_user(request: UserLoginRequest):
     """
     try:
         result = await AuthUseCases.login_user(request)
-        
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
-            )
-        
         return result
         
     except HTTPException:
         raise
+    except InvalidCredentialsError as e:
+        logger.warning(f"Login failed - invalid credentials: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=e.message
+        )
+    except ServiceUnavailableError as e:
+        logger.error(f"Login failed - service unavailable: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=e.message
+        )
     except Exception as e:
-        logger.error(f"Error in login_user endpoint: {e}")
+        logger.error(f"Unexpected error in login_user endpoint: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during login"
@@ -141,19 +159,24 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
             )
         
         result = await AuthUseCases.get_user_profile(uid)
-        
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User profile not found"
-            )
-        
         return result
         
     except HTTPException:
         raise
+    except UserNotFoundError as e:
+        logger.warning(f"Profile fetch failed - user not found: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=e.message
+        )
+    except ServiceUnavailableError as e:
+        logger.error(f"Profile fetch failed - service unavailable: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=e.message
+        )
     except Exception as e:
-        logger.error(f"Error in get_profile endpoint: {e}")
+        logger.error(f"Unexpected error in get_profile endpoint: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while fetching profile"
@@ -173,12 +196,6 @@ async def refresh_token(request: RefreshTokenRequest):
     try:
         result = await AuthUseCases.refresh_token(request.refresh_token)
         
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token"
-            )
-        
         return {
             "access_token": result.get("access_token"),
             "refresh_token": result.get("refresh_token"),
@@ -187,8 +204,20 @@ async def refresh_token(request: RefreshTokenRequest):
         
     except HTTPException:
         raise
+    except (InvalidTokenError, UserNotFoundError) as e:
+        logger.warning(f"Token refresh failed: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=e.message
+        )
+    except ServiceUnavailableError as e:
+        logger.error(f"Token refresh failed - service unavailable: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=e.message
+        )
     except Exception as e:
-        logger.error(f"Error in refresh_token endpoint: {e}")
+        logger.error(f"Unexpected error in refresh_token endpoint: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while refreshing token"

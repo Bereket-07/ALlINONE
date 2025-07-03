@@ -2,6 +2,9 @@ from fastapi import HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from typing import Optional
 from src.use_cases.auth_use_cases import AuthUseCases
+from src.utils.jwt_utils import JWTManager
+from src.utils.exceptions import AuthenticationError
+from src.utils.constants import ERROR_MESSAGES
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,39 +45,34 @@ class AuthMiddleware:
         if not authorization:
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Authorization header is required"}
+                content={"detail": ERROR_MESSAGES["MISSING_AUTHORIZATION"]}
             )
         
         try:
             # Extract token from "Bearer <token>" format
-            if not authorization.startswith("Bearer "):
-                return JSONResponse(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"detail": "Invalid authorization header format. Use 'Bearer <token>'"}
-                )
-            
-            token = authorization.split(" ")[1]
+            token = JWTManager.extract_token_from_header(authorization)
             if not token:
                 return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"detail": "Token is required"}
+                    content={"detail": ERROR_MESSAGES["INVALID_AUTHORIZATION_FORMAT"]}
                 )
             
             # Verify token
             decoded_token = await AuthUseCases.verify_token(token)
-            if not decoded_token:
-                return JSONResponse(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"detail": "Invalid or expired token"}
-                )
             
             # Add user info to request state for use in endpoints
             request.state.user = decoded_token
             
             return await call_next(request)
             
+        except AuthenticationError as e:
+            logger.warning(f"Authentication error in middleware: {e.message}")
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": e.message}
+            )
         except Exception as e:
-            logger.error(f"Error in auth middleware: {e}")
+            logger.error(f"Unexpected error in auth middleware: {e}")
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Authentication failed"}

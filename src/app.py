@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.openapi.models import APIKey, APIKeyIn, SecuritySchemeType
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBearer
+from fastapi.middleware.cors import CORSMiddleware  # ✅ Import CORS middleware
 from src.controllers import query_controller, auth_controller
 import logging
 
@@ -14,6 +15,15 @@ app = FastAPI(
     title="LLM-Routed Query Engine",
     description="Automatically routes a user's query to the most suitable LLM.",
     version="1.0.0"
+)
+
+# ✅ Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (use specific domains in production)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
 
 @app.on_event("startup")

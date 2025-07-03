@@ -8,5 +8,17 @@ langchain-openai
 langchain-anthropic
 langchain-google-genai
 
+# JWT Authentication
+PyJWT
+
+# Password Hashing
+bcrypt
+
+# Firebase Admin SDK (for Firestore)
+firebase-admin
+
+# Email validation
+email-validator
+
 # Environment variables
 python-dotenv

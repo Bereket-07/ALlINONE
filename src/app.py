@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 # Create the FastAPI app
 app = FastAPI(
-    title="LLM-Routed Query Engine with JWT Authentication",
-    description="Automatically routes a user's query to the most suitable LLM with custom JWT authentication and Firestore storage.",
+    title="LLM-Routed Query Engine",
+    description="Automatically routes a user's query to the most suitable LLM.",
     version="1.0.0"
 )
 

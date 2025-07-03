@@ -8,5 +8,8 @@ langchain-openai
 langchain-anthropic
 langchain-google-genai
 
+# Firebase Admin SDK
+firebase-admin
+
 # Environment variables
 python-dotenv

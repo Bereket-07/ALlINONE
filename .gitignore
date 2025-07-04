@@ -301,3 +301,5 @@ temp/
 
 # Local development
 .local/
+
+cloud-access-key.json

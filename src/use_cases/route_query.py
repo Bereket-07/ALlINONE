@@ -22,15 +22,17 @@ ROUTING_PROMPT_TEMPLATE = """
 You are an intelligent routing system. Your task is to select the best language model
 to answer a given user query. You must choose from the following available models: [{available_models}].
 
-Consider the query's nature (e.g., creative writing, coding, factual recall, conversation)
-to make your selection.
+Consider the query's nature AND the preceding conversation history to make your selection.
+For example, if the history is about coding, a follow-up question is likely also about coding.
 
-User Query:
+CONVERSATION HISTORY:
+{conversation_history}
+
+LATEST USER QUERY:
 "{user_query}"
 
-Based on the query, which model is the most appropriate?
+Based on the history and the latest query, which model is the most appropriate?
 Return only the name of the model (e.g., 'claude', 'chatgpt', 'gemini') and nothing else.
-Do not provide any explanation, preamble, or punctuation.
 """
 
 prompt_template = ChatPromptTemplate.from_template(ROUTING_PROMPT_TEMPLATE)
@@ -39,16 +41,42 @@ output_parser = StrOutputParser()
 # Create the routing chain using LangChain Expression Language (LCEL)
 routing_chain = prompt_template | router_llm | output_parser
 
+
+def _format_history_for_prompt(history: List[Dict[str, Any]]) -> str:
+    """Formats a list of conversation turns into a single string."""
+    if not history:
+        return "No history yet. This is the first message."
+    
+    formatted_history = []
+    for turn in history:
+        formatted_history.append(f"Human: {turn.get('query', '')}")
+        formatted_history.append(f"AI: {turn.get('response', '')}")
+        
+    return "\n".join(formatted_history)
+
 async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
     """
     Orchestrates routing a query to the best LLM using a LangChain-based router.
     """
-    available_models_str = ", ".join(AVAILABLE_LLM_NAMES)
+
+        # --- FETCH AND FORMAT HISTORY ---
+    firestore_service = ServiceFactory.get_firestore_service()
+    if not firestore_service:
+        logger.error("Firestore service not available for fetching history.")
+        # We can continue without history, but it's a degraded experience
+        history = []
+    else:
+        history = await firestore_service.get_last_n_conversations(user_id, limit=10)
     
+    formatted_history = _format_history_for_prompt(history)
+    # --- END HISTORY FETCH ---
+    
+    available_models_str = ", ".join(AVAILABLE_LLM_NAMES)
     try:
         # Invoke the chain asynchronously
         llm_choice = await routing_chain.ainvoke({
             "available_models": available_models_str,
+            "conversation_history": formatted_history,
             "user_query": user_query
         })
         
@@ -70,7 +98,7 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
 
     # Delegate the query to the selected LLM
     selected_llm = LLM_REGISTRY[llm_choice]
-    final_response = await selected_llm.generate_response(user_query)
+    final_response = await selected_llm.generate_response(user_query , history=formatted_history)
 
     try:
         firestore_service = ServiceFactory.get_firestore_service()

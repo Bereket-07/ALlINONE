@@ -8,6 +8,7 @@ from src.config import OPENAI_API_KEY
 from src.config import GOOGLE_API_KEY
 from src.infrastructure.llm.llm_list import LLM_REGISTRY, AVAILABLE_LLM_NAMES
 from src.infrastructure.services.service_factory import ServiceFactory
+from typing import List, Dict, Any
 
 # Define the Router LLM using LangChain
 router_llm = ChatGoogleGenerativeAI(
@@ -85,13 +86,13 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
         print(f"match in using the gemini router: {match}")
         if not match:
             print(f"Router LLM returned an invalid choice: '{llm_choice}'. Defaulting to chatgpt.")
-            llm_choice = "gemini" # Fallback to a default
+            llm_choice = "chatgpt" # Fallback to a default
         else:
             llm_choice = match.group(0)
 
     except Exception as e:
         print(f"Error during LangChain routing: {e}. Defaulting to chatgpt.")
-        llm_choice = "gemini" # Fallback on API error
+        llm_choice = "chatgpt" # Fallback on API error
 
     if llm_choice not in LLM_REGISTRY:
         return {"error": f"Internal Error: Chosen LLM '{llm_choice}' is not available in the registry."}

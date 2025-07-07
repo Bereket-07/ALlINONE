@@ -3,6 +3,7 @@ from firebase_admin import firestore
 from typing import Optional, Dict, Any
 from datetime import datetime
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 

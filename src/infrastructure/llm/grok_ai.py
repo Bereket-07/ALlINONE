@@ -13,9 +13,16 @@ class GrokAi(LLMInterface):
             max_tokens=1500
         )
 
-    async def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str,history: str) -> str:
         try:
-            messages = [HumanMessage(content=prompt)]
+            full_context = f"""Here is the conversation history:
+                    {history}
+
+                    Given this history, continue the conversation by responding to the following user input.
+
+                    User: {prompt}
+                    AI:"""
+            messages = [HumanMessage(content=full_context)]
             response = await self.model.ainvoke(messages)
             return response.content
         except Exception as e:

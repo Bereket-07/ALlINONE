@@ -14,7 +14,14 @@ async def handle_query(request: QueryRequest, current_user: dict = Depends(get_c
     Receives a user query, routes it to the best LLM, and returns the response.
     Requires Bearer token authentication.
     """
-    result = await route_query_to_best_llm(request.query)
+
+    user_id = current_user.get("sub") # 'sub' is the standard claim for subject (user ID) in JWT
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: User ID not found."
+        )
+    result = await route_query_to_best_llm(request.query , user_id=user_id)
 
     if "error" in result:
         raise HTTPException(

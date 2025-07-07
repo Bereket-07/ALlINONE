@@ -8,11 +8,11 @@ from src.config import GOOGLE_API_KEY
 from src.infrastructure.llm.llm_list import LLM_REGISTRY, AVAILABLE_LLM_NAMES
 
 # Define the Router LLM using LangChain
-router_llm = ChatGoogleGenerativeAI(
-            model='gemini-2.5-flash',
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.7,
-            max_output_tokens=1500
+router_llm = ChatOpenAI(
+            model="gpt-4o", 
+            api_key=OPENAI_API_KEY, 
+            temperature=0.7, 
+            max_tokens=1500
         )
 
 # Define the prompt template for the router
@@ -42,8 +42,9 @@ async def route_query_to_best_llm(user_query: str) -> dict:
     Orchestrates routing a query to the best LLM using a LangChain-based router.
     """
     available_models_str = ", ".join(AVAILABLE_LLM_NAMES)
-    
+    print("here is bereket ")
     try:
+        
         # Invoke the chain asynchronously
         llm_choice = await routing_chain.ainvoke({
             "available_models": available_models_str,

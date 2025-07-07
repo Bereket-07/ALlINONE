@@ -17,6 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the entire project (including .env for now)
 COPY . .
+COPY all-in-one-ai-464811-firebase-adminsdk-fbsvc-75931db9e6.json /app/service_account.json
+ENV FIREBASE_CREDENTIALS_PATH="/app/service_account.json"
 
 # Expose FastAPI port
 EXPOSE 8000

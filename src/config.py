@@ -9,6 +9,17 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
+# --- Third-party API Keys ---
+COPY_AI_API_KEY = os.getenv("COPY_AI_API_KEY")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+STABILITY_AI_API_KEY = os.getenv("STABILITY_AI_API_KEY")
+HOOTSUITE_ACCESS_TOKEN = os.getenv("HOOTSUITE_ACCESS_TOKEN")
+POWERBI_ACCESS_TOKEN = os.getenv("POWERBI_ACCESS_TOKEN")
+SLIDESPEAK_API_KEY = os.getenv("SLIDESPEAK_API_KEY")
+SIMILARWEB_API_KEY = os.getenv("SIMILARWEB_API_KEY")
+RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")
+
 # --- JWT Configuration ---
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
 

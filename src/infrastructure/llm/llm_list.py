@@ -10,7 +10,7 @@ from src.infrastructure.apis.runway import RunwayClient
 # New models can be added here.
 LLM_REGISTRY = {
     "chatgpt": ChatGPTLLM(),
-    "claude": ClaudeLLM(),
+    # "claude": ClaudeLLM(),
     "gemini": GeminiLLM(),
     "elevenlabs": ElevenLabsLLM(),
     "stability": StabilityAIClient(),

@@ -6,7 +6,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from src.config import OPENAI_API_KEY
 from src.config import GOOGLE_API_KEY
-from src.infrastructure.llm.llm_list import LLM_REGISTRY, AVAILABLE_LLM_NAMES
+from src.infrastructure.llm.llm_list import LLM_REGISTRY, AVAILABLE_LLM_NAMES , MODEL_DESCRIPTIONS   # LLM_NAME_TO_CLASS         
 from src.infrastructure.services.service_factory import ServiceFactory
 from typing import List, Dict, Any
 
@@ -18,10 +18,12 @@ router_llm = ChatGoogleGenerativeAI(
             max_output_tokens=1500
         )
 
+
 # Define the prompt template for the router
 ROUTING_PROMPT_TEMPLATE = """
 You are an intelligent routing system. Your task is to select the best language model
 to answer a given user query. You must choose from the following available models: [{available_models}].
+and there descriptions {model_descriptions}
 
 Consider the query's nature AND the preceding conversation history to make your selection.
 For example, if the history is about coding, a follow-up question is likely also about coding.
@@ -73,12 +75,14 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
     # --- END HISTORY FETCH ---
     
     available_models_str = ", ".join(AVAILABLE_LLM_NAMES)
+    model_descriptions = ", ".join([f"{name}: {desc}" for name, desc in MODEL_DESCRIPTIONS.items()])
     try:
         # Invoke the chain asynchronously
         llm_choice = await routing_chain.ainvoke({
             "available_models": available_models_str,
             "conversation_history": formatted_history,
-            "user_query": user_query
+            "user_query": user_query,
+            "model_descriptions": model_descriptions
         })
         
         # Clean the output just in case the LLM adds extra text
@@ -99,7 +103,7 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
 
     # Delegate the query to the selected LLM
     selected_llm = LLM_REGISTRY[llm_choice]
-    final_response = await selected_llm.generate_response(user_query , history=formatted_history)
+    final_response = await selected_llm.generate_response(user_query , formatted_history)
 
     try:
         firestore_service = ServiceFactory.get_firestore_service()

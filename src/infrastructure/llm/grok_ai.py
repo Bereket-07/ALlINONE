@@ -1,14 +1,14 @@
-from langchain_openai import OpenAI
+from langchain_xai import ChatXAI
 from langchain_core.messages import HumanMessage
-from src.config import OPENAI_API_KEY
+from src.config import XAI_API_KEY
 from src.infrastructure.llm.llm_interface import LLMInterface
 
 class GrokAi(LLMInterface):
-    """LangChain implementation for OpenAI's ChatGPT."""
+    """LangChain implementation for grok's ."""
     def __init__(self, model: str = "grok-beta"):
-        self.model = ChatOpenAI(
+        self.model = ChatXAI(
             model=model, 
-            api_key=OPENAI_API_KEY, 
+            api_key=XAI_API_KEY, 
             temperature=0.7, 
             max_tokens=1500
         )
@@ -27,4 +27,4 @@ class GrokAi(LLMInterface):
             return response.content
         except Exception as e:
             print(f"Error calling ChatGPT via LangChain: {e}")
-            return "Error: Could not get a response from ChatGPT."
+            return "Error: Could not get a response from grok."

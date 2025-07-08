@@ -1,8 +1,11 @@
-import httpx
+from elevenlabs.client import ElevenLabs
+from elevenlabs import play
+from elevenlabs.core.api_error import ApiError
+import base64
+import json
 from pydantic import BaseModel
 from src.config import ELEVENLABS_API_KEY
 from src.infrastructure.llm.llm_interface import LLMInterface
-
 
 
 class ElevenLabsInput(BaseModel):
@@ -19,67 +22,56 @@ class ElevenLabsLLM(LLMInterface):
     """
 
     def __init__(self, api_key: str = ELEVENLABS_API_KEY):
+        self.api_key = api_key
         if api_key is None:
             raise ValueError("API key for ElevenLabs must be provided.")
-        self.api_key = api_key
-        self.base_url = "https://api.elevenlabs.io/v1/models"
-
-    async def generate_response(self, input: ElevenLabsInput) -> str:
-        """
-        Converts text to speech using ElevenLabs API.
-        Returns a URL to the audio or a base64 audio string (if supported).
-        """
-        url = f"{self.base_url}{input.voice_id}"
-
-        headers = {
-            "xi-api-key": self.api_key,
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "text": input.text,
-            "model_id": input.model_id,
-            "voice_settings": {
-                "stability": input.stability,
-                "similarity_boost": input.similarity_boost
-            }
-        }
+    
+    def generate_audio(self, prompt: str):
+        
+        client = ElevenLabs(api_key=self.api_key)  # Replace with real key
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, headers=headers, json=data)
-                response.raise_for_status()
+            audio = client.text_to_speech.convert(
+                voice_id="pFZP5JQG7iQjIQuC4Bku",
+                model_id="eleven_monolingual_v1",
+                text=prompt
+            )
 
-                # ElevenLabs may return audio as binary or a link
-                # If binary: return base64 or save to file
-                # If JSON: return audio field
-                if response.headers.get("Content-Type") == "application/json":
-                    return response.json().get("audio", "No audio returned.")
-                else:
-                    return "Audio response received (non-JSON). Handle accordingly."
+            audio_bytes = audio # Collect all bytes from the generator
+            audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
-        except Exception as e:
-            print(f"ElevenLabs API error: {e}")
-            return "Error: Could not generate audio with ElevenLabs."
+            response = {"audio_base64": audio_base64}
+            return json.dumps(response)
+
+        except ApiError as e:
+            response = {
+                "error": "API Error",
+                "status_code": e.status_code,
+                "message": e.body.get("detail", {}).get("message", "Unknown error")
+            }
+            return json.dumps(response)
+        except Exception as ex:
+            response ={
+                "error": "Unexpected Error",
+                "message": str(ex)
+            }
+            return json.dumps(response)
 
 
-import asyncio
-# from src.infrastructure.apis.eleven_labs import ElevenLabsLLM, ElevenLabsInput
+# async def main():
+#     llm = ElevenLabsLLM()
+#     llm.init()  # Uses default ELEVENLABS_API_KEY from config
 
-async def main():
-    llm = ElevenLabsLLM()
-    llm.init()  # Uses default ELEVENLABS_API_KEY from config
+#     input_data = ElevenLabsInput(
+#         voice_id="your_voice_id",  # Replace with a valid voice_id
+#         text="Hello, this is a test from ElevenLabsLLM.",
+#         model_id="eleven_multilingual_v2",
+#         stability=0.5,
+#         similarity_boost=0.7
+#     )
 
-    input_data = ElevenLabsInput(
-        voice_id="your_voice_id",  # Replace with a valid voice_id
-        text="Hello, this is a test from ElevenLabsLLM.",
-        model_id="eleven_multilingual_v2",
-        stability=0.5,
-        similarity_boost=0.7
-    )
+#     result = await llm.generate_response(input_data)
+#     print("Result:", result)
 
-    result = await llm.generate_response(input_data)
-    print("Result:", result)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# if __name__ == "__main__":
+#     asyncio.run(main())

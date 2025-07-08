@@ -24,7 +24,7 @@ class StabilityAIClient(LLMInterface):
         self.api_key = api_key
         self.api_url = "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image"
 
-    async def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str , history: str) -> str:
         """
         LLMInterface-compliant method: generate an image from a prompt string using default parameters.
         """
@@ -58,26 +58,3 @@ class StabilityAIClient(LLMInterface):
                 print(f"Stability AI API error: {e}")
             return f"Error: Could not generate image with Stability AI."
 
-import asyncio
-
-def get_default_client():
-    return StabilityAIClient()
-
-async def main():
-    client = get_default_client()
-    input_data = StabilityAIInput(
-        prompt="A fantasy landscape with mountains and rivers",
-        cfg_scale=7,
-        height=1024,
-        width=1024,
-        samples=1,
-        steps=30
-    )
-    # Test both LLMInterface and full input
-    result = await client.generate_response(input_data.prompt)
-    print("Result (LLMInterface):", result)
-    result_full = await client.generate_response_from_input(input_data)
-    print("Result (full input):", result_full)
-
-if __name__ == "__main__":
-    asyncio.run(main())

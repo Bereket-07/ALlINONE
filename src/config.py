@@ -18,6 +18,7 @@ POWERBI_ACCESS_TOKEN = os.getenv("POWERBI_ACCESS_TOKEN")
 SLIDESPEAK_API_KEY = os.getenv("SLIDESPEAK_API_KEY")
 SIMILARWEB_API_KEY = os.getenv("SIMILARWEB_API_KEY")
 RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")
 
 # --- JWT Configuration ---
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")

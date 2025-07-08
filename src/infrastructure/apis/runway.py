@@ -19,7 +19,7 @@ class RunwayClient(LLMInterface):
     Inherits from LLMInterface for compatibility with LLM workflows.
     """
 
-    async def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str , history: str) -> str:
         """
         LLMInterface-compliant method: generate a video/image from a prompt string.
         Uses default model and parameters.
@@ -27,7 +27,7 @@ class RunwayClient(LLMInterface):
         client = RunwayML()
 
         try:
-            task = client.text_to_image.create(
+            task =await client.text_to_image.create(
                 model="gen4_image",
                 prompt_text=prompt,
                 ratio="1024:1024",

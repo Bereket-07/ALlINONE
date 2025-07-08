@@ -4,6 +4,7 @@ from src.config import STABILITY_AI_API_KEY
 from typing import Optional
 from src.infrastructure.llm.llm_interface import LLMInterface
 
+
 class StabilityAIInput(BaseModel):
     prompt: str
     cfg_scale: int = 7
@@ -47,10 +48,14 @@ class StabilityAIClient(LLMInterface):
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(self.api_url, headers=headers, json=data)
+                print(resp)
                 resp.raise_for_status()
                 return resp.json()["artifacts"][0].get("base64", "No image data returned.")
         except Exception as e:
-            print(f"Stability AI API error: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print("Stability AI API error:", e.response.text)
+            else:
+                print(f"Stability AI API error: {e}")
             return f"Error: Could not generate image with Stability AI."
 
 import asyncio

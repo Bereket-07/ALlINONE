@@ -1,40 +1,72 @@
-import requests
-from langchain_core.tools import Tool
+from elevenlabs.client import ElevenLabs
+from elevenlabs import play
+from elevenlabs.core.api_error import ApiError
+import base64
+import json
 from pydantic import BaseModel
-from ...config import ELEVENLABS_API_KEY
+from src.config import ELEVENLABS_API_KEY
+from src.infrastructure.llm.llm_interface import LLMInterface
 
-# ---- ELEVENLABS ----
+
 class ElevenLabsInput(BaseModel):
-    voice_id: str
     text: str
+    voice_id: str = "pFZP5JQG7iQjIQuC4Bku"
     model_id: str = "eleven_multilingual_v2"
     stability: float = 0.5
     similarity_boost: float = 0.7
 
-def call_elevenlabs(voice_id: str, text: str, model_id: str = "eleven_multilingual_v2", stability: float = 0.5, similarity_boost: float = 0.7) -> str:
-    try:
-        headers = {
-            "xi-api-key": ELEVENLABS_API_KEY,
-            "Content-Type": "application/json"
-        }
-        data = {
-            "text": text,
-            "model_id": model_id,
-            "voice_settings": {
-                "stability": stability,
-                "similarity_boost": similarity_boost
-            }
-        }
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-        resp = requests.post(url, headers=headers, json=data)
-        resp.raise_for_status()
-        return resp.json().get("audio", "No audio returned.")
-    except Exception as e:
-        return f"ElevenLabs API error: {e}"
 
-elevenlabs_tool = Tool.from_function(
-    func=call_elevenlabs,
-    name="elevenlabs_tool",
-    description="Convert text to speech using ElevenLabs voice API",
-    args_schema=ElevenLabsInput,
-)
+class ElevenLabsLLM(LLMInterface):
+    """
+    Async-compatible ElevenLabs TTS (Text-to-Speech) wrapper.
+    """
+
+    def __init__(self, api_key: str = ELEVENLABS_API_KEY):
+        self.api_key = api_key
+        if api_key is None:
+            raise ValueError("API key for ElevenLabs must be provided.")
+    
+    def generate_response(self, input_data: ElevenLabsInput):
+        
+        client = ElevenLabs(api_key=self.api_key)
+        try:
+            audio = client.text_to_speech.convert(
+                voice_id=input_data.voice_id,
+                model_id=input_data.model_id,
+                text=input_data.text
+            )
+            audio_bytes = b"".join(audio)
+            audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+            response = {"audio_base64": audio_base64}
+            return json.dumps(response)
+        except ApiError as e:
+            response = {
+                "error": "API Error",
+                "status_code": getattr(e, 'status_code', None),
+                "message": str(e.body)
+            }
+            return json.dumps(response)
+        except Exception as ex:
+            response = {
+                "error": "Unexpected Error",
+                "message": str(ex)
+            }
+            return json.dumps(response)
+
+
+def main():
+    llm = ElevenLabsLLM()
+
+    input_data = ElevenLabsInput(
+        voice_id="your_voice_id",  # Replace with a valid voice_id
+        text="Hello, this is a test from ElevenLabsLLM.",
+        model_id="eleven_multilingual_v2",
+        stability=0.5,
+        similarity_boost=0.7
+    )
+
+    result = llm.generate_response(input_data)
+    print("Result:", result)
+
+if __name__ == "__main__":
+    main()

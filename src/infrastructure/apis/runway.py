@@ -1,38 +1,57 @@
-import requests
-from langchain_core.tools import Tool
+import json
+import httpx
+from runwayml import RunwayML, TaskFailedError
 from pydantic import BaseModel
-from ...config import RUNWAY_API_KEY
+from src.config import RUNWAY_API_KEY
+from typing import Optional
+from src.infrastructure.llm.llm_interface import LLMInterface
 
-# ---- RUNWAY ----
 class RunwayInput(BaseModel):
     prompt: str
-    model: str = "gen-2"
+    model: str = "gen4_image"
     duration: int = 4
     width: int = 1280
     height: int = 720
 
-def call_runway(prompt: str, model: str = "gen-2", duration: int = 4, width: int = 1280, height: int = 720) -> str:
-    try:
-        data = {
-            "prompt": prompt,
-            "model": model,
-            "duration": duration,
-            "width": width,
-            "height": height
-        }
-        headers = {
-            "Authorization": f"Bearer {RUNWAY_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        resp = requests.post("https://api.runwayml.com/v1/generations", headers=headers, json=data)
-        resp.raise_for_status()
-        return resp.json().get("output", {}).get("url", "No output URL found.")
-    except Exception as e:
-        return f"Runway API error: {e}"
+class RunwayClient(LLMInterface):
+    """
+    Async-compatible Runway video/image generation client.
+    Inherits from LLMInterface for compatibility with LLM workflows.
+    """
 
-runway_tool = Tool.from_function(
-    func=call_runway,
-    name="runway_tool",
-    description="Generate video/image from prompt using Runway",
-    args_schema=RunwayInput,
-)
+    async def generate_response(self, prompt: str) -> str:
+        """
+        LLMInterface-compliant method: generate a video/image from a prompt string.
+        Uses default model and parameters.
+        """
+        client = RunwayML()
+
+        try:
+            task = client.text_to_image.create(
+                model="gen4_image",
+                prompt_text=prompt,
+                ratio="1024:1024",
+            ).wait_for_task_output()
+            
+            response = {
+                "output": task.output,
+                "status": getattr(task, "status", None),
+                "error": getattr(task, "error", None)
+            }
+            return json.dumps(response)
+
+        except TaskFailedError as e:
+            return json.dumps({"error": str(e)})
+
+# def main():
+#     client = RunwayClient()
+#     prompt = "A futuristic city"
+#     # Since generate_response is async, we need to run it in an event loop
+#     import asyncio
+#     result = asyncio.run(client.generate_response(prompt))
+#     print("Result:", result)
+
+# if __name__ == "__main__":
+#     main()
+
+

@@ -9,8 +9,8 @@ from src.infrastructure.llm.llm_interface import LLMInterface
 
 
 class ElevenLabsInput(BaseModel):
-    voice_id: str
     text: str
+    voice_id: str = "pFZP5JQG7iQjIQuC4Bku"
     model_id: str = "eleven_multilingual_v2"
     stability: float = 0.5
     similarity_boost: float = 0.7
@@ -26,52 +26,47 @@ class ElevenLabsLLM(LLMInterface):
         if api_key is None:
             raise ValueError("API key for ElevenLabs must be provided.")
     
-    def generate_audio(self, prompt: str):
+    def generate_response(self, input_data: ElevenLabsInput):
         
-        client = ElevenLabs(api_key=self.api_key)  # Replace with real key
-
+        client = ElevenLabs(api_key=self.api_key)
         try:
             audio = client.text_to_speech.convert(
-                voice_id="pFZP5JQG7iQjIQuC4Bku",
-                model_id="eleven_monolingual_v1",
-                text=prompt
+                voice_id=input_data.voice_id,
+                model_id=input_data.model_id,
+                text=input_data.text
             )
-
-            audio_bytes = audio # Collect all bytes from the generator
+            audio_bytes = b"".join(audio)
             audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-
             response = {"audio_base64": audio_base64}
             return json.dumps(response)
-
         except ApiError as e:
             response = {
                 "error": "API Error",
-                "status_code": e.status_code,
-                "message": e.body.get("detail", {}).get("message", "Unknown error")
+                "status_code": getattr(e, 'status_code', None),
+                "message": str(e.body)
             }
             return json.dumps(response)
         except Exception as ex:
-            response ={
+            response = {
                 "error": "Unexpected Error",
                 "message": str(ex)
             }
             return json.dumps(response)
 
 
-# async def main():
-#     llm = ElevenLabsLLM()
-#     llm.init()  # Uses default ELEVENLABS_API_KEY from config
+def main():
+    llm = ElevenLabsLLM()
 
-#     input_data = ElevenLabsInput(
-#         voice_id="your_voice_id",  # Replace with a valid voice_id
-#         text="Hello, this is a test from ElevenLabsLLM.",
-#         model_id="eleven_multilingual_v2",
-#         stability=0.5,
-#         similarity_boost=0.7
-#     )
+    input_data = ElevenLabsInput(
+        voice_id="your_voice_id",  # Replace with a valid voice_id
+        text="Hello, this is a test from ElevenLabsLLM.",
+        model_id="eleven_multilingual_v2",
+        stability=0.5,
+        similarity_boost=0.7
+    )
 
-#     result = await llm.generate_response(input_data)
-#     print("Result:", result)
+    result = llm.generate_response(input_data)
+    print("Result:", result)
 
-# if __name__ == "__main__":
-#     asyncio.run(main())
+if __name__ == "__main__":
+    main()

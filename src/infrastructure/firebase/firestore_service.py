@@ -3,6 +3,7 @@ from firebase_admin import firestore
 from typing import Optional, Dict, Any
 from datetime import datetime
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -128,3 +129,72 @@ class FirestoreService:
         except Exception as e:
             logger.error(f"Error updating user in Firestore: {e}")
             return False 
+    @classmethod
+    async def add_conversation_turn(cls, conversation_data: Dict[str, Any]) -> bool:
+        """
+        Adds a new conversation turn (query and response) to the conversations collection.
+        
+        Args:
+            conversation_data: A dictionary containing user_id, query, response, etc.
+            
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not cls.is_initialized():
+            logger.error("Firestore not initialized")
+            return False
+            
+        try:
+            # We'll use a new unique ID for each conversation document
+            doc_id = str(uuid.uuid4())
+            
+            # Add a timestamp
+            conversation_data['created_at'] = datetime.utcnow()
+            
+            # Save to a new 'conversations' collection
+            convo_ref = cls._db.collection('conversations').document(doc_id)
+            convo_ref.set(conversation_data)
+            
+            logger.info(f"Conversation turn saved for user: {conversation_data.get('user_id')}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving conversation turn to Firestore: {e}")
+            return False
+    @classmethod
+    async def get_last_n_conversations(cls, user_id: str, limit: int = 10) -> list[Dict[str, Any]]:
+        """
+        Retrieves the last N conversation turns for a given user, ordered by time.
+        
+        Args:
+            user_id: The ID of the user whose conversations to fetch.
+            limit: The maximum number of conversation turns to return.
+            
+        Returns:
+            A list of conversation documents, from oldest to newest.
+        """
+        if not cls.is_initialized():
+            logger.error("Firestore not initialized")
+            return []
+            
+        try:
+            convo_ref = cls._db.collection('conversations')
+            
+            # Query for the user's conversations, order by most recent, and limit the result
+            query = (convo_ref
+                     .where('user_id', '==', user_id)
+                     .order_by('created_at', direction=firestore.Query.DESCENDING)
+                     .limit(limit))
+            
+            docs = query.stream()
+            
+            # The query returns newest first, so we reverse it to get chronological order
+            history = [doc.to_dict() for doc in docs]
+            history.reverse() # Reverses in-place to get [oldest, ..., newest]
+            
+            logger.info(f"Retrieved {len(history)} conversation turns for user {user_id}")
+            return history
+
+        except Exception as e:
+            logger.error(f"Error getting conversation history for user {user_id}: {e}")
+            return []

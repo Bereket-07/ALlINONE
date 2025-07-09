@@ -2,7 +2,7 @@ import json
 import httpx
 from runwayml import RunwayML, TaskFailedError
 from pydantic import BaseModel
-from src.config import RUNWAY_API_KEY
+from src.config import RUNWAYML_API_SECRET
 from typing import Optional
 from src.infrastructure.llm.llm_interface import LLMInterface
 

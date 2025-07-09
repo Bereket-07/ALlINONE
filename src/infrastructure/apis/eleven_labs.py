@@ -6,6 +6,7 @@ import json
 from pydantic import BaseModel
 from src.config import ELEVENLABS_API_KEY
 from src.infrastructure.llm.llm_interface import LLMInterface
+from typing import Optional
 
 
 class ElevenLabsInput(BaseModel):
@@ -21,10 +22,10 @@ class ElevenLabsLLM(LLMInterface):
     Async-compatible ElevenLabs TTS (Text-to-Speech) wrapper.
     """
 
-    def __init__(self, api_key: str = ELEVENLABS_API_KEY):
-        self.api_key = api_key
-        if api_key is None:
+    def __init__(self, api_key: Optional[str] = ELEVENLABS_API_KEY):
+        if not api_key:
             raise ValueError("API key for ElevenLabs must be provided.")
+        self.api_key = api_key
     
     async def generate_response(self, input_data , history: str):
         # If input_data is a string, wrap it using default values
@@ -61,13 +62,9 @@ class ElevenLabsLLM(LLMInterface):
 # def main():
 #     llm = ElevenLabsLLM()
 
-#     input_data = ElevenLabsInput(
-#         voice_id="pFZP5JQG7iQjIQuC4Bku",  # Replace with a valid voice_id
-#         text="Hello, this is a test from ElevenLabsLLM.",
-#         model_id="eleven_multilingual_v2",
-#         stability=0.5,
-#         similarity_boost=0.7
-#     )
+    input_data = ElevenLabsInput(
+        text="Hello, this is a test from ElevenLabsLLM.",
+    )
 
 #     result = llm.generate_response(input_data)
 #     print("Result:", result)

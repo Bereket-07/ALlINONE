@@ -8,6 +8,7 @@ from typing import Optional, Union
 from pydantic import BaseModel
 from src.config import STABILITY_AI_API_KEY
 from src.infrastructure.llm.llm_interface import LLMInterface
+import base64
 
 class StabilityAIInput(BaseModel):
     prompt: str
@@ -25,6 +26,18 @@ class StabilityAIResult(BaseModel):
     seed: Optional[str] = None
     error: Optional[str] = None
 
+    def to_json(self) -> str:
+        result = {
+            "finish_reason": self.finish_reason,
+            "seed": self.seed,
+            "error": self.error,
+        }
+        if self.image_bytes is not None:
+            result["image_base64"] = base64.b64encode(self.image_bytes).decode("utf-8")
+        else:
+            result["image_base64"] = None
+        return json.dumps(result)
+
 class StabilityAIClient(LLMInterface):
     """
     Async-compatible Stability AI image generation client (v2beta/ultra).
@@ -39,11 +52,7 @@ class StabilityAIClient(LLMInterface):
     async def generate_response(self, prompt: str) -> str:
         input = StabilityAIInput(prompt=prompt)
         result = await self.generate_response_from_input(input)
-        if result.error:
-            return json.dumps({"error": result.error})
-        # Return image as base64 for compatibility
-        import base64
-        return base64.b64encode(result.image_bytes).decode("utf-8") if result.image_bytes else json.dumps({"error": "No image returned"})
+        return result.to_json()
 
     async def generate_response_from_input(self, input: StabilityAIInput) -> StabilityAIResult:
         headers = {
@@ -90,25 +99,25 @@ class StabilityAIClient(LLMInterface):
             return StabilityAIResult(error=f"Stability AI API error: {repr(e)}")
 
 
-# async def main():
-#     client = StabilityAIClient()
-#     input_data = StabilityAIInput(
-#         prompt="A fantasy landscape with mountains and rivers",
-#     )
+async def main():
+    client = StabilityAIClient()
+    input_data = StabilityAIInput(
+        prompt="A fantasy landscape with mountains and rivers",
+    )
 
-#     result = await client.generate_response_from_input(input_data)
-#     if result.error:
-#         print("Error:", result.error)
-#     else:
-#         filename = f"generated_{result.seed}.{input_data.output_format}"
-#         if result.image_bytes is not None:
-#             with open(filename, "wb") as f:
-#                 f.write(result.image_bytes)
-#             print(f"Saved image {filename}")
-#         else:
-#             print("No image bytes to save.")
-#         print("Finish reason:", result.finish_reason)
-#         print("Seed:", result.seed)
+    result = await client.generate_response_from_input(input_data)
+    if result.error:
+        print("Error:", result.error)
+    else:
+        filename = f"generated_{result.seed}.{input_data.output_format}"
+        if result.image_bytes is not None:
+            with open(filename, "wb") as f:
+                f.write(result.image_bytes)
+            print(f"Saved image {filename}")
+        else:
+            print("No image bytes to save.")
+        print("Finish reason:", result.finish_reason)
+        print("Seed:", result.seed)
 
-# if __name__ == "__main__":
-#     asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

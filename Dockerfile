@@ -1,5 +1,5 @@
 # Use official Python base image
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # Avoid Python writing .pyc files and buffer logs
 ENV PYTHONDONTWRITEBYTECODE=1

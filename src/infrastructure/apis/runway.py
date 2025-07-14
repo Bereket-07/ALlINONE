@@ -27,7 +27,7 @@ class RunwayClient(LLMInterface):
         client = RunwayML()
 
         try:
-            task =await client.text_to_image.create(
+            task =client.text_to_image.create(
                 model="gen4_image",
                 prompt_text=prompt,
                 ratio="1024:1024",

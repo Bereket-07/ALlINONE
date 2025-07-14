@@ -1,6 +1,8 @@
 import re
 import logging
 from langchain_openai import ChatOpenAI
+
+logger = logging.getLogger(__name__)
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -9,7 +11,7 @@ from src.config import OPENAI_API_KEY
 from src.config import GOOGLE_API_KEY
 from src.infrastructure.llm.llm_list import LLM_REGISTRY, AVAILABLE_LLM_NAMES , MODEL_DESCRIPTIONS   # LLM_NAME_TO_CLASS         
 from src.infrastructure.services.service_factory import ServiceFactory
-from src.utils.pdf_processor import PDFProcessor
+from src.utils.pdf_processor import DocumentProcessor
 from src.domain.models.llm_selection import FileQueryRequest, ProcessedFileContent
 from typing import List, Dict, Any, Optional
 
@@ -136,12 +138,12 @@ async def route_file_query_to_best_llm(file: UploadFile, request: FileQueryReque
     logger = logging.getLogger(__name__)
     
     try:
-        # Step 1: Extract content from PDF file
-        file_content = await PDFProcessor.extract_pdf_content(file)
+        # Step 1: Extract content from document file
+        file_content = await DocumentProcessor.extract_document_content(file)
         logger.info(f"Successfully extracted content from {file_content.filename} for user {user_id}")
         
         # Step 2: Generate appropriate prompt based on file content and query
-        file_prompt = PDFProcessor.generate_file_insights_prompt(file_content, request.query)
+        file_prompt = DocumentProcessor.generate_file_insights_prompt(file_content, request.query)
         
         # Step 3: Fetch conversation history
         firestore_service = ServiceFactory.get_firestore_service()
@@ -206,7 +208,7 @@ Return only the model name (e.g., 'claude', 'chatgpt', 'gemini') and nothing els
         try:
             if firestore_service:
                 # Create a summary of the file for history
-                file_summary = PDFProcessor.summarize_file_for_history(file_content)
+                file_summary = DocumentProcessor.create_file_summary_for_history(file_content)
                 query_for_history = request.query if request.query else "[File analysis request]"
                 
                 conversation_data = {
@@ -308,5 +310,10 @@ Provide a detailed, well-structured analysis that would help someone quickly und
         return await route_file_query_to_best_llm(file_to_process, file_request, user_id)
     
     # No valid files, process as regular text query
+    if not query or not query.strip():
+        return {
+            "error": "Either query or files must be provided"
+        }
+    
     logger.info(f"Processing text-only query for user {user_id}")
     return await route_query_to_best_llm(query, user_id=user_id)

@@ -49,7 +49,8 @@ class StabilityAIClient(LLMInterface):
         self.api_key = api_key
         self.api_url = "https://api.stability.ai/v2beta/stable-image/generate/ultra"
 
-
+    async def generate_response(self, prompt: str, history: str) -> str:
+        """Generate image from prompt and return as JSON string."""
         input = StabilityAIInput(prompt=prompt)
         result = await self.generate_response_from_input(input)
         return result.to_json()
@@ -93,4 +94,5 @@ class StabilityAIClient(LLMInterface):
                     return StabilityAIResult(error="Generation failed NSFW classifier", finish_reason=finish_reason, seed=seed)
                 return StabilityAIResult(image_bytes=image_bytes, finish_reason=finish_reason, seed=seed)
         except Exception as e:
+            return StabilityAIResult(error=f"Error generating image: {str(e)}")
 

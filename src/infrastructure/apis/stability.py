@@ -49,7 +49,7 @@ class StabilityAIClient(LLMInterface):
         self.api_key = api_key
         self.api_url = "https://api.stability.ai/v2beta/stable-image/generate/ultra"
 
-    async def generate_response(self, prompt: str) -> str:
+
         input = StabilityAIInput(prompt=prompt)
         result = await self.generate_response_from_input(input)
         return result.to_json()
@@ -93,31 +93,4 @@ class StabilityAIClient(LLMInterface):
                     return StabilityAIResult(error="Generation failed NSFW classifier", finish_reason=finish_reason, seed=seed)
                 return StabilityAIResult(image_bytes=image_bytes, finish_reason=finish_reason, seed=seed)
         except Exception as e:
-            print("Exception type:", type(e))
-            print("Exception args:", e.args)
-            traceback.print_exc()
-            return StabilityAIResult(error=f"Stability AI API error: {repr(e)}")
 
-
-async def main():
-    client = StabilityAIClient()
-    input_data = StabilityAIInput(
-        prompt="A fantasy landscape with mountains and rivers",
-    )
-
-    result = await client.generate_response_from_input(input_data)
-    if result.error:
-        print("Error:", result.error)
-    else:
-        filename = f"generated_{result.seed}.{input_data.output_format}"
-        if result.image_bytes is not None:
-            with open(filename, "wb") as f:
-                f.write(result.image_bytes)
-            print(f"Saved image {filename}")
-        else:
-            print("No image bytes to save.")
-        print("Finish reason:", result.finish_reason)
-        print("Seed:", result.seed)
-
-if __name__ == "__main__":
-    asyncio.run(main())

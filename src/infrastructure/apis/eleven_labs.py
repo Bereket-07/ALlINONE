@@ -27,11 +27,14 @@ class ElevenLabsLLM(LLMInterface):
             raise ValueError("API key for ElevenLabs must be provided.")
         self.api_key = api_key
     
-    def generate_response(self, input_data: ElevenLabsInput):
-        
+    async def generate_response(self, input_data , history: str):
+        # If input_data is a string, wrap it using default values
+
+        input_data = ElevenLabsInput(text=input_data)
+
         client = ElevenLabs(api_key=self.api_key)
         try:
-            audio = client.text_to_speech.convert(
+            audio =  client.text_to_speech.convert(
                 voice_id=input_data.voice_id,
                 model_id=input_data.model_id,
                 text=input_data.text
@@ -55,15 +58,10 @@ class ElevenLabsLLM(LLMInterface):
             return json.dumps(response)
 
 
-def main():
-    llm = ElevenLabsLLM()
 
-    input_data = ElevenLabsInput(
-        text="Hello, this is a test from ElevenLabsLLM.",
-    )
 
-    result = llm.generate_response(input_data)
-    print("Result:", result)
+#     result = llm.generate_response(input_data)
+#     print("Result:", result)
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

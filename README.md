@@ -8,7 +8,7 @@ A comprehensive AI platform that automatically routes user queries to the most s
 - **Intelligent Query Routing**: Automatically selects the best LLM (OpenAI GPT, Claude, Gemini) based on query content
 - **LangChain Integration**: Built on LangChain for robust LLM orchestration
 - **Real-time Analysis**: Analyzes query intent and complexity for optimal routing
-- **Document Analysis**: Upload PDF files for intelligent content extraction, analysis, and question-answering
+- **Document Analysis**: Upload PDF and DOCX files for intelligent content extraction, analysis, and question-answering
 
 ### 🎯 AI Services Integration
 The platform integrates with 12+ leading AI services:
@@ -119,7 +119,7 @@ All AI services are available as LangChain tools, enabling:
 ## API Endpoints
 
 ### Core LLM Routing
-- `POST /api/v1/query` - Unified endpoint that accepts text queries and/or file uploads (PDF)
+- `POST /api/v1/query` - Unified endpoint that accepts text queries and/or file uploads (PDF, DOCX)
   - **Text only**: Regular query processing
   - **Files only**: Automatic comprehensive document insights
   - **Text + Files**: Query-specific document analysis
@@ -174,8 +174,8 @@ print(response.json())
 ```python
 import requests
 
-# Upload PDF without query - generates comprehensive insights automatically
-with open("document.pdf", "rb") as f:
+# Upload PDF or DOCX without query - generates comprehensive insights automatically
+with open("document.pdf", "rb") as f:  # or "document.docx"
     response = requests.post("http://localhost:8000/api/v1/query",
         files={"files": f},
         headers={"Authorization": "Bearer your_jwt_token"}
@@ -185,12 +185,12 @@ print(response.json())
 # Output: {"llm_used": "chatgpt", "response": "Comprehensive document analysis...", "file_processed": {"filename": "document.pdf", ...}}
 ```
 
-### Query with PDF File Analysis
+### Query with Document File Analysis
 ```python
 import requests
 
-# Upload PDF with specific question
-with open("document.pdf", "rb") as f:
+# Upload PDF or DOCX with specific question
+with open("document.pdf", "rb") as f:  # or "document.docx"
     response = requests.post("http://localhost:8000/api/v1/query",
         files={"files": f},
         data={"query": "What are the main conclusions of this research paper?"},
@@ -200,8 +200,8 @@ with open("document.pdf", "rb") as f:
 print(response.json())
 # Output: {"llm_used": "chatgpt", "response": "...", "file_processed": {"filename": "document.pdf", ...}}
 
-# Upload multiple PDFs (only first one processed currently)
-with open("report1.pdf", "rb") as f1, open("report2.pdf", "rb") as f2:
+# Upload multiple documents (only first one processed currently)
+with open("report1.pdf", "rb") as f1, open("report2.docx", "rb") as f2:
     response = requests.post("http://localhost:8000/api/v1/query",
         files=[("files", f1), ("files", f2)],
         data={"query": "Compare these documents"},

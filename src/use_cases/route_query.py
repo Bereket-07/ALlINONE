@@ -1,5 +1,6 @@
 import re
 import logging
+from fastapi import logger
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate

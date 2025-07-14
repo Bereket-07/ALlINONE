@@ -69,7 +69,7 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
         # We can continue without history, but it's a degraded experience
         history = []
     else:
-        history = await firestore_service.get_last_n_conversations(user_id, limit=10)
+        history = await firestore_service.get_last_n_conversations(user_id, limit=5)
     
     formatted_history = _format_history_for_prompt(history)
     # --- END HISTORY FETCH ---
@@ -107,7 +107,12 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
 
     try:
         firestore_service = ServiceFactory.get_firestore_service()
-        if firestore_service:
+        
+        # Skip saving if the LLM is not meant to be stored
+        llms_to_skip_storage = {"runway", "stability", "elevenlabs"}
+        if llm_choice in llms_to_skip_storage:
+            logging.info(f"Skipping Firestore save for LLM: {llm_choice}")
+        elif firestore_service:
             conversation_data = {
                 "user_id": user_id,
                 "query": user_query,
@@ -120,6 +125,7 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
     except Exception as e:
         # We log the error but don't fail the request. The user should still get their answer.
         logger.error(f"Failed to save conversation for user {user_id}: {e}")
+
 
     return {
         "llm_used": llm_choice,

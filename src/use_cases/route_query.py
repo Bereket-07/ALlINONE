@@ -1,5 +1,6 @@
 import re
 import logging
+from fastapi import logger
 from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)

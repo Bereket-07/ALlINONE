@@ -3,7 +3,7 @@ from fastapi.openapi.models import APIKey, APIKeyIn, SecuritySchemeType
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware  # ✅ Import CORS middleware
-from src.controllers import query_controller, auth_controller
+from src.controllers import query_controller, auth_controller, query_controller, conversation_controller
 import logging
 
 # Configure logging
@@ -56,6 +56,7 @@ async def startup_event():
 # Include the API routers
 app.include_router(query_controller.router)
 app.include_router(auth_controller.router)
+app.include_router(conversation_controller.router)
 
 @app.get("/", tags=["Health Check"])
 def read_root():

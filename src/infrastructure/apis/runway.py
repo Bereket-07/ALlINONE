@@ -24,7 +24,7 @@ class RunwayClient(LLMInterface):
         LLMInterface-compliant method: generate a video/image from a prompt string.
         Uses default model and parameters.
         """
-        client = RunwayML()
+        client = RunwayML(api_key=RUNWAY_API_KEY)
 
         try:
             task =await client.text_to_image.create(

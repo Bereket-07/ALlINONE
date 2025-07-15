@@ -8,6 +8,7 @@ A comprehensive AI platform that automatically routes user queries to the most s
 - **Intelligent Query Routing**: Automatically selects the best LLM (OpenAI GPT, Claude, Gemini) based on query content
 - **LangChain Integration**: Built on LangChain for robust LLM orchestration
 - **Real-time Analysis**: Analyzes query intent and complexity for optimal routing
+- **Document Analysis**: Upload PDF and DOCX files for intelligent content extraction, analysis, and question-answering
 
 ### 🎯 AI Services Integration
 The platform integrates with 12+ leading AI services:
@@ -118,7 +119,10 @@ All AI services are available as LangChain tools, enabling:
 ## API Endpoints
 
 ### Core LLM Routing
-- `POST /query` - Route query to best LLM with AI tools integration
+- `POST /api/v1/query` - Unified endpoint that accepts text queries and/or file uploads (PDF, DOCX)
+  - **Text only**: Regular query processing
+  - **Files only**: Automatic comprehensive document insights
+  - **Text + Files**: Query-specific document analysis
 
 ### AI Services Health & Status
 - `GET /ai/health` - Check health of all AI services
@@ -152,17 +156,57 @@ All AI services are available as LangChain tools, enabling:
 
 ## Usage Examples
 
-### Basic Query Routing
+### Text-Only Query
 ```python
 import requests
 
-response = requests.post("http://localhost:8000/query", 
-    json={"query": "Generate an image of a beautiful sunset"},
+# Regular text query (form data)
+response = requests.post("http://localhost:8000/api/v1/query", 
+    data={"query": "Generate an image of a beautiful sunset"},
     headers={"Authorization": "Bearer your_jwt_token"}
 )
 
 print(response.json())
-# Output: {"llm_used": "chatgpt", "tools_used": ["stability_ai_generate_image"], "response": "..."}
+# Output: {"llm_used": "chatgpt", "response": "...", "file_processed": null}
+```
+
+### File-Only Analysis (Auto Insights)
+```python
+import requests
+
+# Upload PDF or DOCX without query - generates comprehensive insights automatically
+with open("document.pdf", "rb") as f:  # or "document.docx"
+    response = requests.post("http://localhost:8000/api/v1/query",
+        files={"files": f},
+        headers={"Authorization": "Bearer your_jwt_token"}
+    )
+
+print(response.json())
+# Output: {"llm_used": "chatgpt", "response": "Comprehensive document analysis...", "file_processed": {"filename": "document.pdf", ...}}
+```
+
+### Query with Document File Analysis
+```python
+import requests
+
+# Upload PDF or DOCX with specific question
+with open("document.pdf", "rb") as f:  # or "document.docx"
+    response = requests.post("http://localhost:8000/api/v1/query",
+        files={"files": f},
+        data={"query": "What are the main conclusions of this research paper?"},
+        headers={"Authorization": "Bearer your_jwt_token"}
+    )
+
+print(response.json())
+# Output: {"llm_used": "chatgpt", "response": "...", "file_processed": {"filename": "document.pdf", ...}}
+
+# Upload multiple documents (only first one processed currently)
+with open("report1.pdf", "rb") as f1, open("report2.docx", "rb") as f2:
+    response = requests.post("http://localhost:8000/api/v1/query",
+        files=[("files", f1), ("files", f2)],
+        data={"query": "Compare these documents"},
+        headers={"Authorization": "Bearer your_jwt_token"}
+    )
 ```
 
 ### Direct AI Service Usage

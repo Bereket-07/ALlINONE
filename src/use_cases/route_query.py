@@ -28,6 +28,9 @@ and there descriptions {model_descriptions}
 Consider the query's nature AND the preceding conversation history to make your selection.
 For example, if the history is about coding, a follow-up question is likely also about coding.
 
+If the user query is about general information, product descriptions, or broad knowledge (e.g., "What can I do with Runway?"),
+choose 'gemini'.
+
 CONVERSATION HISTORY:
 {conversation_history}
 
@@ -111,7 +114,12 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
         # Skip saving if the LLM is not meant to be stored
         llms_to_skip_storage = {"runway", "stability", "elevenlabs"}
         if llm_choice in llms_to_skip_storage:
-            logging.info(f"Skipping Firestore save for LLM: {llm_choice}")
+            conversation_data = {
+                "user_id": user_id,
+                "query": user_query,
+                "llm_used": llm_choice
+            }
+            await firestore_service.add_conversation_turn(conversation_data)
         elif firestore_service:
             conversation_data = {
                 "user_id": user_id,

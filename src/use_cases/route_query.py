@@ -1,7 +1,9 @@
+from datetime import datetime
 import re
 import logging
 from fastapi import logger
 from langchain_openai import ChatOpenAI
+from pytz import timezone
 
 logger = logging.getLogger(__name__)
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -63,7 +65,7 @@ def _format_history_for_prompt(history: List[Dict[str, Any]]) -> str:
         
     return "\n".join(formatted_history)
 
-async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
+async def route_query_to_best_llm(user_query: str , user_id: str, conversation_id: str) -> dict:
     """
     Orchestrates routing a query to the best LLM using a LangChain-based router.
     """
@@ -75,7 +77,7 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
         # We can continue without history, but it's a degraded experience
         history = []
     else:
-        history = await firestore_service.get_last_n_conversations(user_id, limit=10)
+        history = await firestore_service.get_last_n_conversations(user_id, conversation_id, limit=10)
     
     formatted_history = _format_history_for_prompt(history)
     # --- END HISTORY FETCH ---
@@ -132,7 +134,7 @@ async def route_query_to_best_llm(user_query: str , user_id: str) -> dict:
         "response": final_response
     }
 
-async def route_file_query_to_best_llm(file: UploadFile, request: FileQueryRequest, user_id: str) -> dict:
+async def route_file_query_to_best_llm(file: UploadFile, request: FileQueryRequest, user_id: str, conversation_id) -> dict:
     """
     Orchestrates processing a file with optional query, routes to the best LLM, and returns response.
     """
@@ -152,7 +154,10 @@ async def route_file_query_to_best_llm(file: UploadFile, request: FileQueryReque
             logger.error("Firestore service not available for fetching history.")
             history = []
         else:
-            history = await firestore_service.get_last_n_conversations(user_id, limit=10)
+            if not conversation_id:
+                # If no conversation ID provided, create a new session
+                conversation_id = await firestore_service.create_conversation_session(user_id)
+            history = await firestore_service.get_last_n_conversations(user_id, conversation_id, limit=10)
         
         formatted_history = _format_history_for_prompt(history)
         
@@ -214,6 +219,9 @@ Return only the model name (e.g., 'claude', 'chatgpt', 'gemini') and nothing els
                 
                 conversation_data = {
                     "user_id": user_id,
+                    "conversation_id": conversation_id,
+                    "title": f"File Analysis: {file_content.filename}",
+                    "created_at": datetime.now(timezone('UTC')),
                     "query": f"{query_for_history}\n\n{file_summary}",
                     "response": final_response,
                     "llm_used": llm_choice,
@@ -234,14 +242,15 @@ Return only the model name (e.g., 'claude', 'chatgpt', 'gemini') and nothing els
         return {
             "llm_used": llm_choice,
             "response": final_response,
-            "file_processed": file_content
+            "conversation_id": conversation_id,
+            "file_processed": file_content,
         }
         
     except Exception as e:
         logger.error(f"Error in route_file_query_to_best_llm: {e}")
         return {"error": f"Failed to process file query: {str(e)}"}
 
-async def route_unified_query_to_best_llm(query: Optional[str], files: Optional[List[UploadFile]], user_id: str) -> dict:
+async def route_unified_query_to_best_llm(query: Optional[str], files: Optional[List[UploadFile]], user_id: str, conversation_id) -> dict:
     """
     Unified routing function that handles both text-only queries and queries with file attachments.
     
@@ -294,7 +303,7 @@ Provide a detailed, well-structured analysis that would help someone quickly und
     # Check if files are provided and process accordingly
     if has_files:
         # Process with files
-        logger.info(f"Processing query with {len(valid_files)} file(s) for user {user_id}")
+        # logger.info(f"Processing query with {len(valid_files)} file(s) for user {user_id}")
         
         if len(valid_files) > 1:
             # Multiple files - process the first PDF for now
@@ -308,7 +317,7 @@ Provide a detailed, well-structured analysis that would help someone quickly und
         file_request = FileQueryRequest(query=query)
         
         # Route to file processing logic
-        return await route_file_query_to_best_llm(file_to_process, file_request, user_id)
+        return await route_file_query_to_best_llm(file_to_process, file_request, user_id, conversation_id)
     
     # No valid files, process as regular text query
     if not query or not query.strip():
@@ -317,4 +326,4 @@ Provide a detailed, well-structured analysis that would help someone quickly und
         }
     
     logger.info(f"Processing text-only query for user {user_id}")
-    return await route_query_to_best_llm(query, user_id=user_id)
+    return await route_query_to_best_llm(query, user_id=user_id, conversation_id=conversation_id)

@@ -13,7 +13,8 @@ router = APIRouter(
 async def handle_query(
     query: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    conversation_id: Optional[str] = Form(None)
 ):
     """
     Unified endpoint that receives a user query and/or files, routes to the best LLM, and returns the response.
@@ -69,7 +70,7 @@ async def handle_query(
             final_query = query
             final_files = files
 
-        result = await route_unified_query_to_best_llm(final_query, final_files, user_id=user_id)
+        result = await route_unified_query_to_best_llm(final_query, final_files, user_id=user_id,conversation_id=conversation_id)
 
         if "error" in result:
             raise HTTPException(
@@ -77,7 +78,7 @@ async def handle_query(
                 detail=result["error"]
             )
 
-        print(f"DEBUG - Final result: {result}")
+        # print(f"DEBUG - Final result: {result}")
         return result
 
     except HTTPException:

@@ -178,8 +178,8 @@ class FirestoreService:
         try:
             convo_ref = cls._db.collection('conversations')
             query = (convo_ref
-                     .where('user_id', '==', user_id)
-                     .where('conversation_id', '==', conversation_id)
+                     .where(filter=('user_id', '==', user_id))
+                     .where(filter=('conversation_id', '==', conversation_id))
                      .order_by('created_at', direction=firestore.Query.DESCENDING)
                      .limit(limit))
             docs = query.stream()

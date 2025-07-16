@@ -37,7 +37,7 @@ Consider the query's nature AND the preceding conversation history to make your 
 For example, if the history is about coding, a follow-up question is likely also about coding.
 
 If the user query is about general information, product descriptions, or broad knowledge (e.g., "What can I do with Runway?"),
-choose 'gemini'.
+choose 'gemini' and you can refer this description {model_descriptions}.
 
 CONVERSATION HISTORY:
 {conversation_history}

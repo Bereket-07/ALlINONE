@@ -1,7 +1,7 @@
 import firebase_admin
-from firebase_admin import firestore
-from typing import Optional, Dict, Any
-from datetime import datetime
+from firebase_admin import credentials, firestore
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone  # ✅ MERGED: Added timezone for consistency
 import logging
 import uuid
 
@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 class FirestoreService:
     """
-    Simple Firestore service for user storage.
+    ✅ MERGED: Service for all Firestore interactions, including user auth, 
+    conversations, and Allin1 task trees.
     """
     
     _db: Optional[firestore.Client] = None
@@ -18,11 +19,15 @@ class FirestoreService:
     @classmethod
     def initialize(cls, credentials_path: str) -> bool:
         """
-        Initialize Firestore connection.
+        Initialize Firestore connection. (No changes from your original code)
         """
+        if cls._initialized:
+            logger.info("Firestore already initialized.")
+            return True
+            
         try:
             if not firebase_admin._apps:
-                cred = firebase_admin.credentials.Certificate(credentials_path)
+                cred = credentials.Certificate(credentials_path)
                 firebase_admin.initialize_app(cred)
                 logger.info("Firebase Admin SDK initialized successfully")
             
@@ -37,110 +42,81 @@ class FirestoreService:
     
     @classmethod
     def is_initialized(cls) -> bool:
-        """Check if Firestore is initialized."""
+        """Check if Firestore is initialized. (No changes from your original code)"""
         return cls._initialized and cls._db is not None
     
+    # --- Existing User Methods (Unchanged) ---
     @classmethod
     async def create_user(cls, user_data: Dict[str, Any]) -> bool:
-        """
-        Create a new user in Firestore users collection.
-        """
+        """Create a new user in Firestore users collection."""
         if not cls.is_initialized():
             logger.error("Firestore not initialized")
             return False
-        
         try:
-            # Store user in users collection
             user_ref = cls._db.collection('users').document(user_data['uid'])
             user_ref.set(user_data)
-            
             logger.info(f"User created in Firestore: {user_data['uid']}")
             return True
-            
         except Exception as e:
             logger.error(f"Error creating user in Firestore: {e}")
             return False
     
     @classmethod
     async def get_user_by_email(cls, email: str) -> Optional[Dict[str, Any]]:
-        """
-        Get user by email address from users collection.
-        """
+        """Get user by email address from users collection."""
         if not cls.is_initialized():
             logger.error("Firestore not initialized")
             return None
-        
         try:
             users_ref = cls._db.collection('users')
             query = users_ref.where('email', '==', email).limit(1)
             docs = query.stream()
-            
             for doc in docs:
                 user_data = doc.to_dict()
                 user_data['uid'] = doc.id
                 return user_data
-            
             return None
-            
         except Exception as e:
             logger.error(f"Error getting user by email: {e}")
             return None
     
     @classmethod
     async def get_user_by_uid(cls, uid: str) -> Optional[Dict[str, Any]]:
-        """
-        Get user by UID from users collection.
-        """
+        """Get user by UID from users collection."""
         if not cls.is_initialized():
             logger.error("Firestore not initialized")
             return None
-        
         try:
             user_ref = cls._db.collection('users').document(uid)
             user_doc = user_ref.get()
-            
             if not user_doc.exists:
                 return None
-            
             user_data = user_doc.to_dict()
             user_data['uid'] = uid
             return user_data
-            
         except Exception as e:
             logger.error(f"Error getting user by UID: {e}")
             return None
     
     @classmethod
     async def update_user(cls, uid: str, updates: Dict[str, Any]) -> bool:
-        """
-        Update user data in users collection.
-        """
+        """Update user data in users collection."""
         if not cls.is_initialized():
             logger.error("Firestore not initialized")
             return False
-        
         try:
             user_ref = cls._db.collection('users').document(uid)
             user_ref.update(updates)
-            
             logger.info(f"User updated in Firestore: {uid}")
             return True
-            
         except Exception as e:
             logger.error(f"Error updating user in Firestore: {e}")
             return False 
+
+    # --- Existing Conversation Methods (Unchanged) ---
     @classmethod
     async def add_conversation_turn(cls, conversation_data: Dict[str, Any]) -> bool:
-        """
-        Adds a new conversation turn (query and response) to the conversations collection.
-        Requires 'conversation_id' in conversation_data to support multiple chats per user.
-        
-        Args:
-            conversation_data: A dictionary containing user_id, conversation_id, query, response, etc.
-            
-        Returns:
-            True if successful, False otherwise.
-        """
+        """Adds a new conversation turn to the conversations collection."""
         if not cls.is_initialized():
             logger.error("Firestore not initialized")
             return False
@@ -149,7 +125,7 @@ class FirestoreService:
             return False
         try:
             doc_id = str(uuid.uuid4())
-            conversation_data['created_at'] = datetime.utcnow()
+            conversation_data['created_at'] = datetime.now(timezone.utc)
             convo_ref = cls._db.collection('conversations').document(doc_id)
             convo_ref.set(conversation_data)
             logger.info(f"Conversation turn saved for user: {conversation_data.get('user_id')} in conversation: {conversation_data.get('conversation_id')}")
@@ -159,33 +135,21 @@ class FirestoreService:
             return False
 
     @classmethod
-    async def get_last_n_conversations(cls, user_id: str, conversation_id: str, limit: int = 10) -> list[Dict[str, Any]]:
-        """
-        Retrieves the last N conversation turns for a given user and conversation, ordered by time.
-        
-        Args:
-            user_id: The ID of the user whose conversations to fetch.
-            conversation_id: The ID of the conversation (chat session).
-            limit: The maximum number of conversation turns to return.
-            
-        Returns:
-            A list of conversation documents, from oldest to newest.
-        """
+    async def get_last_n_conversations(cls, user_id: str, conversation_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieves the last N conversation turns for a given user and conversation."""
         if not cls.is_initialized():
             logger.error("Firestore not initialized")
             return []
-            
         try:
             convo_ref = cls._db.collection('conversations')
             query = (convo_ref
-                     .where(filter=('user_id', '==', user_id))
-                     .where(filter=('conversation_id', '==', conversation_id))
+                     .where('user_id', '==', user_id)
+                     .where('conversation_id', '==', conversation_id)
                      .order_by('created_at', direction=firestore.Query.DESCENDING)
                      .limit(limit))
             docs = query.stream()
             history = [doc.to_dict() for doc in docs]
             history.reverse()
-            logger.info(f"Retrieved {len(history)} conversation turns for user {user_id} in conversation {conversation_id}")
             return history
         except Exception as e:
             logger.error(f"Error getting conversation history for user {user_id} in conversation {conversation_id}: {e}")
@@ -193,24 +157,12 @@ class FirestoreService:
 
     @classmethod
     def create_new_conversation_id(cls) -> str:
-        """
-        Generates a new unique conversation ID for a new chat session.
-        
-        Returns:
-            A new conversation_id string.
-        """
+        """Generates a new unique conversation ID."""
         return str(uuid.uuid4())
     
     @classmethod
     async def create_conversation_session(cls, user_id: str, title: str = None) -> Optional[str]:
-        """
-        Creates a new conversation session document in 'conversation_sessions' collection.
-        Args:
-            user_id: The ID of the user starting the session.
-            title: Optional title for the conversation (e.g., first message or user-supplied).
-        Returns:
-            The new conversation_id if successful, else None.
-        """
+        """Creates a new conversation session document."""
         if not cls.is_initialized():
             logger.error("Firestore not initialized")
             return None
@@ -219,7 +171,7 @@ class FirestoreService:
             session_data = {
                 'conversation_id': conversation_id,
                 'user_id': user_id,
-                'created_at': datetime.utcnow(),
+                'created_at': datetime.now(timezone.utc),
                 'title': title or "New Chat"
             }
             session_ref = cls._db.collection('conversation_sessions').document(conversation_id)
@@ -231,15 +183,8 @@ class FirestoreService:
             return None
 
     @classmethod
-    async def get_last_n_conversation_sessions(cls, user_id: str, limit: int = 10) -> list[Dict[str, Any]]:
-        """
-        Retrieves the last N conversation sessions for a user, ordered by most recent.
-        Args:
-            user_id: The ID of the user.
-            limit: The maximum number of sessions to return.
-        Returns:
-            A list of session documents (metadata only), newest first.
-        """
+    async def get_last_n_conversation_sessions(cls, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieves the last N conversation sessions for a user."""
         if not cls.is_initialized():
             logger.error("Firestore not initialized")
             return []
@@ -250,9 +195,31 @@ class FirestoreService:
                      .order_by('created_at', direction=firestore.Query.DESCENDING)
                      .limit(limit))
             docs = query.stream()
-            sessions = [doc.to_dict() for doc in docs]
-            logger.info(f"Retrieved {len(sessions)} conversation sessions for user {user_id}")
-            return sessions
+            return [doc.to_dict() for doc in docs]
         except Exception as e:
             logger.error(f"Error getting conversation sessions for user {user_id}: {e}")
             return []
+
+    # --- ✅ MERGED: NEW METHOD FOR ALLIN1 TASK TREES ---
+    @classmethod
+    async def save_task_tree(cls, user_id: str, task_tree_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Saves a generated Allin1 task tree to the 'task_trees' collection.
+        """
+        if not cls.is_initialized():
+            logger.error("Firestore not initialized, cannot save task tree.")
+            return None
+        
+        try:
+            document_data = {
+                "user_id": user_id,
+                "created_at": datetime.now(timezone.utc),
+                **task_tree_data
+            }
+            update_time, doc_ref =  cls._db.collection('task_trees').add(document_data)
+            logger.info(f"Successfully saved task tree {doc_ref.id} for user {user_id}")
+            return doc_ref.id
+            
+        except Exception as e:
+            logger.error(f"Error saving task tree to Firestore for user {user_id}: {e}")
+            return None

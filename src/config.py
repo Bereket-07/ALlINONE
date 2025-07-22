@@ -19,6 +19,7 @@ SLIDESPEAK_API_KEY = os.getenv("SLIDESPEAK_API_KEY")
 SIMILARWEB_API_KEY = os.getenv("SIMILARWEB_API_KEY")
 RUNWAYML_API_SECRET = os.getenv("RUNWAYML_API_SECRET")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
+COMPOSIO_API_KEY = os.getenv("COMPOSIO_API_KEY")  # Default value if not set
 
 # --- JWT Configuration ---
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")

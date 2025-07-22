@@ -223,3 +223,37 @@ class FirestoreService:
         except Exception as e:
             logger.error(f"Error saving task tree to Firestore for user {user_id}: {e}")
             return None
+    @classmethod
+    async def get_task_tree(cls, task_tree_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves a specific task tree by its ID."""
+        if not cls.is_initialized():
+            logger.error("Firestore not initialized, cannot get task tree.")
+            return None
+        try:
+            doc_ref = cls._db.collection('task_trees').document(task_tree_id)
+            doc = await doc_ref.get() # Use await for async get
+            if doc.exists:
+                data = doc.to_dict()
+                data['task_tree_id'] = doc.id # Ensure ID is included
+                return data
+            logger.warning(f"Task tree with ID {task_tree_id} not found.")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting task tree {task_tree_id}: {e}")
+            return None
+
+    @classmethod
+    async def update_task_tree(cls, task_tree_id: str, updates: Dict[str, Any]) -> bool:
+        """Updates an existing task tree document in Firestore."""
+        if not cls.is_initialized():
+            logger.error("Firestore not initialized, cannot update task tree.")
+            return False
+        try:
+            doc_ref = cls._db.collection('task_trees').document(task_tree_id)
+            updates['updated_at'] = datetime.now(timezone.utc)
+            await doc_ref.update(updates) # Use await for async update
+            logger.info(f"Successfully updated task tree {task_tree_id}.")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating task tree {task_tree_id} in Firestore: {e}")
+            return False

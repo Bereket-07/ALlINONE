@@ -8,6 +8,7 @@ from src.controllers.auth_controller import get_current_user
 from src.use_cases.planner_agent import generate_task_tree
 # Import the new generator-based use case
 from src.use_cases.information_gatherer import interactive_information_gathering_loop
+
 from src.domain.models.task_tree import TaskTree
 from src.infrastructure.firebase.firestore_service import FirestoreService
 
@@ -47,7 +48,6 @@ async def create_task_plan(
 
 
 # In src/controllers/allin1_controller.py
-
 @router.websocket("/ws/tasks/{task_tree_id}/gather")
 async def websocket_gather_info(websocket: WebSocket, task_tree_id: str):
     """
@@ -55,12 +55,9 @@ async def websocket_gather_info(websocket: WebSocket, task_tree_id: str):
     """
     await websocket.accept()
     
-    # In a real app, you would get this from a JWT in the WebSocket connection
-    user_id = "17ad8405-6035-46be-9662-c805ac844977" # Using your example UID
+    user_id = "17ad8405-6035-46be-9662-c805ac844977"
 
     try:
-        # --- FIX 1: Call get_task_tree with only the required argument ---
-        # The method in FirestoreService only needs the task_tree_id to find the document.
         print(f"Fetching task tree with ID: {task_tree_id}")
         task_tree_dict = FirestoreService.get_task_tree(task_tree_id)
         
@@ -69,29 +66,43 @@ async def websocket_gather_info(websocket: WebSocket, task_tree_id: str):
             await websocket.close()
             return
         
-        # --- FIX 2: Add a crucial security check ---
-        # Verify that the user connected to the WebSocket is the owner of this task.
         if task_tree_dict.get("user_id") != user_id:
             logger.warning(f"Security alert: User {user_id} attempted to access task {task_tree_id} owned by {task_tree_dict.get('user_id')}")
             await websocket.send_json({"error": "Access denied."})
             await websocket.close()
             return
 
-        # Now that we have the validated data, create the Pydantic model
         task_tree = TaskTree(**task_tree_dict)
 
-        # The rest of the function proceeds as before...
         info_gatherer = interactive_information_gathering_loop(user_id, task_tree)
-        question_to_ask = await info_gatherer.asend(None)
+        
+        # --- MODIFICATION STARTS HERE ---
+        question_to_ask = None
+        try:
+            # Attempt to start the generator and get the first question
+            question_to_ask = await info_gatherer.asend(None)
+        except StopAsyncIteration:
+            # This happens if the generator finishes immediately (no placeholders found).
+            # This is a valid state, so we just let question_to_ask remain None.
+            logger.info(f"Generator for task {task_tree_id} completed immediately (no input needed).")
+            pass # The loop below will be skipped, and we will proceed to completion.
+        # --- MODIFICATION ENDS HERE ---
+
 
         while question_to_ask:
             await websocket.send_json(question_to_ask)
             answer_data = await websocket.receive_json()
             user_answer = answer_data.get("answer")
+            
             if user_answer is None:
                 await websocket.send_json({"error": "Invalid response format. 'answer' key is required."})
                 continue
-            question_to_ask = await info_gatherer.asend(user_answer)
+            
+            try:
+                question_to_ask = await info_gatherer.asend(user_answer)
+            except StopAsyncIteration:
+                logger.info(f"Generator for task {task_tree_id} finished. Ending Q&A loop.")
+                question_to_ask = None
 
         await websocket.send_json({
             "status": "completed",
@@ -100,7 +111,7 @@ async def websocket_gather_info(websocket: WebSocket, task_tree_id: str):
         })
 
     except WebSocketDisconnect:
-        logger.warning(f"WebSocket disconnected for task {task_tree_id}.")
+        logger.warning(f"WebSocket disconnected for task {task_e}.")
     except Exception as e:
         logger.error(f"Error in WebSocket for task {task_tree_id}: {e}", exc_info=True)
         if not websocket.client_state == 'DISCONNECTED':

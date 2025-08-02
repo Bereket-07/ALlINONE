@@ -2,12 +2,16 @@
 
 import logging
 from fastapi import WebSocket
-from typing import Dict, Any
+from typing import Dict, Any , Optional
 
 from src.domain.models.task_tree import TaskTree, Subtask
-from src.use_cases.composio_executor_service import ComposioExecutorService, ComposioAuthRequired
+from src.use_cases.composio_executor_service import (
+    ComposioExecutorService, 
+    ComposioAuthRequired,
+    ComposioApiKeyRequired # Import our new exception
+)
 from src.infrastructure.firebase.firestore_service import FirestoreService
-from composio import Action
+from composio.client.enums import Action
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +49,13 @@ async def execute_task_tree(user_id: str, task_tree: TaskTree, websocket: WebSoc
                 "detail": "Successfully executed."
             })
 
-        except ComposioAuthRequired as e:
-            logger.warning(f"Authentication required for {e.app_name}. Notifying client.")
+        except ComposioApiKeyRequired as e:
+            logger.warning(f"API key required for {e.app_name}. Notifying client.")
             await websocket.send_json({
-                "status": "auth_required",
+                "status": "api_key_required",
                 "app_name": e.app_name,
-                "auth_url": e.auth_url,
-                "message": f"Please authenticate with {e.app_name} to continue."
+                "required_keys": e.required_keys,
+                "message": f"Please provide the API Key for {e.app_name} to continue."
             })
 
             # Wait for the client to confirm authentication
@@ -84,11 +88,27 @@ async def execute_subtask(
     subtask: Subtask,
     websocket: WebSocket,
     composio_service: ComposioExecutorService,
-    execution_context: Dict[str, Any]
+    execution_context: Dict[str, Any],
+    api_key_params: Optional[Dict[str, Any]] = None # Add new optional parameter
 ):
     """Handles the logic for a single subtask."""
+    
+    # Check if the subtask is an internal/placeholder action that doesn't use a real API.
+    # If the `api` is 'None' or empty, we treat it as a no-op for execution.
+    if not subtask.api or subtask.api.lower() == 'none':
+        logger.info(
+            f"Skipping execution for internal subtask '{subtask.subtask_name}' "
+            f"as it has no external API."
+        )
+        # We can put the payload directly into the context for later steps to use.
+        # This is useful if a placeholder step's "result" is just its input payload.
+        execution_context[subtask.function] = subtask.payload
+        subtask.result = "Internal step, no execution needed."
+        # Persist the "skipped" status
+        FirestoreService.save_task_tree(user_id, task_tree.model_dump(), task_tree.task_tree_id)
+        return # Exit this function early
+
     # Simple heuristic to map API to Composio App
-    # This can be made more robust with an LLM call or a mapping dictionary
     app_name = subtask.api.split(" ")[0].upper().replace("API", "")
     
     # Check auth BEFORE doing anything else for this app
@@ -122,9 +142,9 @@ def find_best_action(function_name: str, actions: list[Action]) -> Action | None
     Finds the best matching Composio Action.
     This is a simple implementation. An LLM could do this more intelligently.
     """
-    # Exact match
+    # Exact match on the end of the action name
     for action in actions:
-        if action.name.lower().endswith(function_name.lower()):
+        if action.name.lower().endswith(f"_{function_name.lower()}"):
             return action
     # Partial match
     for action in actions:
@@ -135,16 +155,32 @@ def find_best_action(function_name: str, actions: list[Action]) -> Action | None
 
 def resolve_payload(payload: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Replaces placeholders like "RESULT:search_flights:flight_id" with actual values.
+    Replaces placeholders like "RESULT:get_email_body:body" with actual values.
     """
     resolved = {}
     for key, value in payload.items():
         if isinstance(value, str) and value.startswith("RESULT:"):
-            _, source_function, result_key = value.split(":")
-            if source_function in context and result_key in context[source_function]:
-                 resolved[key] = context[source_function][result_key]
+            # Splits "RESULT:get_email_body:body" into ["RESULT", "get_email_body", "body"]
+            parts = value.split(":")
+            if len(parts) != 3:
+                raise ValueError(f"Invalid RESULT format: {value}. Expected 'RESULT:function_name:key'")
+            
+            _, source_function, result_key = parts
+            
+            # Check if the function has been executed and its result is in the context
+            if source_function not in context:
+                raise ValueError(f"Dependency error: Function '{source_function}' was not executed yet.")
+            
+            source_result = context[source_function]
+            
+            # Check if the key exists in the source result
+            if isinstance(source_result, dict) and result_key in source_result:
+                resolved[key] = source_result[result_key]
             else:
-                 raise ValueError(f"Could not resolve dependency: {value}")
+                raise ValueError(
+                    f"Dependency error: Key '{result_key}' not found in the result of function '{source_function}'. "
+                    f"Available keys: {list(source_result.keys()) if isinstance(source_result, dict) else 'Not a dictionary'}"
+                )
         else:
             resolved[key] = value
     return resolved

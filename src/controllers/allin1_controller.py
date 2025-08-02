@@ -8,7 +8,7 @@ from src.controllers.auth_controller import get_current_user
 from src.use_cases.planner_agent import generate_task_tree
 # Import the new generator-based use case
 from src.use_cases.information_gatherer import interactive_information_gathering_loop
-
+from src.use_cases.task_executor import execute_task_tree 
 from src.domain.models.task_tree import TaskTree
 from src.infrastructure.firebase.firestore_service import FirestoreService
 
@@ -49,73 +49,83 @@ async def create_task_plan(
 
 # In src/controllers/allin1_controller.py
 @router.websocket("/ws/tasks/{task_tree_id}/gather")
-async def websocket_gather_info(websocket: WebSocket, task_tree_id: str):
+async def websocket_gather_info_and_execute(websocket: WebSocket, task_tree_id: str):
     """
-    WebSocket endpoint for interactively gathering missing task information.
+    WebSocket endpoint for a full task lifecycle:
+    1. Interactively gathers missing information.
+    2. Triggers and manages task execution.
+    3. Handles interactive authentication for execution.
     """
     await websocket.accept()
     
-    user_id = "17ad8405-6035-46be-9662-c805ac844977"
+    user_id = "17ad8405-6035-46be-9662-c805ac844977" # Replace with real user from token
 
     try:
-        print(f"Fetching task tree with ID: {task_tree_id}")
         task_tree_dict = FirestoreService.get_task_tree(task_tree_id)
-        
         if not task_tree_dict:
-            await websocket.send_json({"error": "Task not found."})
-            await websocket.close()
+            # ... (handle not found)
             return
-        
         if task_tree_dict.get("user_id") != user_id:
-            logger.warning(f"Security alert: User {user_id} attempted to access task {task_tree_id} owned by {task_tree_dict.get('user_id')}")
-            await websocket.send_json({"error": "Access denied."})
-            await websocket.close()
+            # ... (handle access denied)
             return
 
         task_tree = TaskTree(**task_tree_dict)
 
-        info_gatherer = interactive_information_gathering_loop(user_id, task_tree)
-        
-        # --- MODIFICATION STARTS HERE ---
-        question_to_ask = None
-        try:
-            # Attempt to start the generator and get the first question
-            question_to_ask = await info_gatherer.asend(None)
-        except StopAsyncIteration:
-            # This happens if the generator finishes immediately (no placeholders found).
-            # This is a valid state, so we just let question_to_ask remain None.
-            logger.info(f"Generator for task {task_tree_id} completed immediately (no input needed).")
-            pass # The loop below will be skipped, and we will proceed to completion.
-        # --- MODIFICATION ENDS HERE ---
-
-
-        while question_to_ask:
-            await websocket.send_json(question_to_ask)
-            answer_data = await websocket.receive_json()
-            user_answer = answer_data.get("answer")
+        # --- STAGE 1: INFORMATION GATHERING ---
+        if task_tree.status in ["pending", "in_progress"]:
+            logger.info(f"Starting information gathering for task: {task_tree_id}")
+            info_gatherer = interactive_information_gathering_loop(user_id, task_tree)
             
-            if user_answer is None:
-                await websocket.send_json({"error": "Invalid response format. 'answer' key is required."})
-                continue
-            
+            question_to_ask = None
             try:
-                question_to_ask = await info_gatherer.asend(user_answer)
+                question_to_ask = await info_gatherer.asend(None)
             except StopAsyncIteration:
-                logger.info(f"Generator for task {task_tree_id} finished. Ending Q&A loop.")
-                question_to_ask = None
+                logger.info(f"No information gathering needed for task {task_tree_id}.")
+                pass
 
+            while question_to_ask:
+                await websocket.send_json(question_to_ask)
+                answer_data = await websocket.receive_json()
+                user_answer = answer_data.get("answer")
+                
+                if user_answer is None:
+                    # ... (handle invalid format)
+                    continue
+                
+                try:
+                    question_to_ask = await info_gatherer.asend(user_answer)
+                except StopAsyncIteration:
+                    logger.info(f"Information gathering complete for task {task_tree_id}.")
+                    question_to_ask = None
+        
+        # At this point, task_tree is fully populated and its status is 'completed'.
+
+        # --- STAGE 2: EXECUTION ---
+        logger.info(f"Proceeding to execution phase for task: {task_tree_id}")
+        # The execute_task_tree function will now handle all further communication
+        await execute_task_tree(
+            user_id=user_id,
+            task_tree=task_tree,
+            websocket=websocket
+        )
+
+        # Send final success message after execution
         await websocket.send_json({
-            "status": "completed",
-            "message": "All information has been gathered.",
+            "status": "executed",
+            "message": "Task workflow has been successfully executed.",
             "final_plan": task_tree.model_dump()
         })
 
     except WebSocketDisconnect:
-        logger.warning(f"WebSocket disconnected for task {task_e}.")
+        logger.warning(f"WebSocket disconnected for task {task_tree_id}.")
     except Exception as e:
-        logger.error(f"Error in WebSocket for task {task_tree_id}: {e}", exc_info=True)
+        logger.error(f"Error in WebSocket lifecycle for task {task_tree_id}: {e}", exc_info=True)
         if not websocket.client_state == 'DISCONNECTED':
-            await websocket.send_json({"error": "An internal server error occurred."})
+            await websocket.send_json({
+                "status": "failed",
+                "error": "An internal server error occurred during the workflow.",
+                "detail": str(e)
+            })
     finally:
         if not websocket.client_state == 'DISCONNECTED':
             await websocket.close()

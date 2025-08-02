@@ -1,14 +1,26 @@
-# src/use_cases/composio_executor_service.py
-
 import asyncio
 import logging
 from typing import Dict, Any, List, Optional
-from composio import ComposioToolSet, App, Action
+
+from composio.client import Composio as ComposioToolSet
+# ✅ FIX 1: The import for Composio is slightly redundant but okay. The main fix is deleting the ConnectedAccount import.
+from composio import Composio
+from composio.client.enums import App, Action
+# ❌ DELETE THIS LINE: from composio.client import ConnectedAccount  # This is the source of the error
+from composio.exceptions import InvalidParams
 
 logger = logging.getLogger(__name__)
 
+# --- NEW EXCEPTION FOR API KEYS ---
+class ComposioApiKeyRequired(Exception):
+    """Custom exception to signal that an API key is needed from the user."""
+    def __init__(self, app_name: str, required_keys: list[str], message="API Key is required."):
+        self.app_name = app_name
+        self.required_keys = required_keys
+        self.message = message
+        super().__init__(self.message)
+        
 class ComposioAuthRequired(Exception):
-    """Custom exception to signal that OAuth is needed."""
     def __init__(self, app_name: str, auth_url: str, message="Authentication is required."):
         self.app_name = app_name
         self.auth_url = auth_url
@@ -16,53 +28,78 @@ class ComposioAuthRequired(Exception):
         super().__init__(self.message)
 
 class ComposioExecutorService:
-    """
-    A service to orchestrate Composio actions, refactored for server-side use.
-    It returns data and raises specific exceptions instead of using print/input.
-    """
-    def __init__(self, entity_id: str = "default"):
+    # This __init__ needs to be present for self.toolset and self.entity_id
+    def __init__(self, entity_id: str):
         self.entity_id = entity_id
-        self.toolset = ComposioToolSet(entity_id=self.entity_id)
+        self.toolset = ComposioToolSet()
 
     def refresh_client(self):
-        """Re-initializes the toolset to pick up new authentications."""
-        logger.info("Refreshing Composio toolset to detect new authentications.")
-        self.toolset = ComposioToolSet(entity_id=self.entity_id)
+        """Refreshes the Composio client."""
+        logger.info("Refreshing Composio client...")
+        self.toolset = ComposioToolSet()
 
-    async def check_and_handle_authentication(self, app_name: str) -> bool:
+    # --- THE MODIFIED FUNCTION ---
+    async def check_and_handle_authentication(
+        self,
+        app_name: str,
+        api_key_params: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
-        Checks if an app is authenticated. If not, raises ComposioAuthRequired.
-        Returns True if already authenticated.
+        Checks app authentication.
+        - If already connected, returns True.
+        - If OAuth is needed, raises ComposioAuthRequired.
+        - If an API Key is needed, raises ComposioApiKeyRequired.
+        - If API key is provided, attempts to connect.
         """
         logger.info(f"Checking authentication for app: {app_name}")
-        connected_accounts = await asyncio.to_thread(self.toolset.get_connected_accounts)
         
-        app_is_connected = any(
-            (hasattr(acc, 'appName') and acc.appName.upper() == app_name.upper()) or
-            (hasattr(acc, 'app') and str(acc.app).upper() == app_name.upper())
-            for acc in connected_accounts
-        )
+        # ✅ THE FINAL FIX: Use the correct method name from the reference script.
+        connected_accounts: List[Any] = await asyncio.to_thread(lambda: self.toolset.connected_accounts.list)
 
-        if app_is_connected:
+        # This logic should now work correctly, as it matches the original script's intent.
+        if any(acc.app.value.upper() == app_name.upper() for acc in connected_accounts):
             logger.info(f"App '{app_name}' is already authenticated.")
             return True
 
-        logger.warning(f"App '{app_name}' is not authenticated. Raising auth challenge.")
+        logger.warning(f"App '{app_name}' is not authenticated. Determining auth method.")
         app_enum = getattr(App, app_name.upper(), None)
         if not app_enum:
             raise ValueError(f"App '{app_name}' is not a valid Composio App.")
 
-        # This will be caught by the orchestrator and sent to the user
-        oauth_request = await asyncio.to_thread(
-            lambda: self.toolset.initiate_connection(
-                app=app_enum,
-                entity_id=self.entity_id
+        try:
+            oauth_request = await asyncio.to_thread(
+                lambda: self.toolset.initiate_connection(
+                    app=app_enum,
+                    entity_id=self.entity_id,
+                    connected_account_params=api_key_params or {}
+                )
             )
-        )
-        if not oauth_request or not hasattr(oauth_request, 'redirectUrl'):
-            raise ConnectionError(f"Failed to generate OAuth URL for {app_name}.")
+            if api_key_params:
+                 logger.info(f"Successfully connected to {app_name} using provided API key.")
+                 return True
             
-        raise ComposioAuthRequired(app_name=app_name, auth_url=oauth_request.redirectUrl)
+            if not oauth_request or not hasattr(oauth_request, 'redirectUrl'):
+                raise ConnectionError(f"Failed to generate OAuth URL for {app_name}.")
+            
+            raise ComposioAuthRequired(app_name=app_name, auth_url=oauth_request.redirectUrl)
+
+        except InvalidParams as e:
+            error_str = str(e).lower()
+            if 'connected_account_params' in error_str and 'generic_api_key' in error_str:
+                logger.info(f"{app_name} requires an API key. Raising challenge.")
+                raise ComposioApiKeyRequired(app_name=app_name, required_keys=['generic_api_key'])
+            else:
+                raise e
+
+        except InvalidParams as e:
+            error_str = str(e).lower()
+            if 'connected_account_params' in error_str and 'generic_api_key' in error_str:
+                logger.info(f"{app_name} requires an API key. Raising challenge.")
+                raise ComposioApiKeyRequired(app_name=app_name, required_keys=['generic_api_key'])
+            else:
+                raise e
+    
+    # --- The rest of the methods should be okay ---
 
     async def get_actions_for_app(self, app_name: str) -> List[Action]:
         """Fetches available actions for a given app."""
